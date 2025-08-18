@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<types>
+  <type>scolarité</type>
+  <type>vacances</type>
+  <type>travail</type>
+  <type>
+    <name>evenement</name>
+    <subtypes>
+  <subtype>ponctuel</subtype>
+  <subtype>naissance</subtype>
+  <subtype>deces</subtype>
+  <subtype>anniversaire</subtype>
+    </subtypes>
+  </type>
+</types>

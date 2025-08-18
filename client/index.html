@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Formulaire evenement</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    form { max-width: 400px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 4px; }
+    button { margin-top: 12px; padding: 10px 20px; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h2>Nouvelle entrée</h2>
+  <form id="activityForm">
+    <label>Nom
+      <input type="text" name="titre" required />
+    </label>
+    <label>Type
+      <select name="type" id="typeSelect">
+        <option value="">Chargement...</option>
+      </select>
+    </label>
+    <div id="subtypeContainer" style="display:none">
+      <label>Sous-type
+        <select name="subtype" id="subtypeSelect"></select>
+      </label>
+    </div>
+    <label>Date de début
+      <input type="date" name="date_debut" />
+    </label>
+    <label>Date de fin
+      <input type="date" name="date_fin" />
+    </label>
+    <label>Lieu
+      <input type="text" name="lieu" placeholder="Adresse, ville..." />
+    </label>
+    <label>Participants/Intervenants (séparés par des virgules)
+      <input type="text" name="participants" placeholder="ex: Alice, Bob, Charlie" />
+    </label>
+    <label>Informations complémentaires
+      <textarea name="infos"></textarea>
+    </label>
+    <button type="submit">Enregistrer</button>
+  </form>
+  <div id="result"></div>
+  <h3>Liste des activités enregistrées</h3>
+  <div id="listeActivites"></div>
+  <script>
+    document.getElementById('activityForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const data = {
+        titre: form.titre.value,
+        type: form.type.value,
+        subtype: (form.subtype && form.subtype.closest('#subtypeContainer').style.display !== 'none') ? form.subtype.value : '',
+        date_debut: form.date_debut.value,
+        date_fin: form.date_fin.value,
+        lieu: form.lieu.value,
+        participants: form.participants.value,
+        infos: form.infos.value
+      };
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = '';
+      try {
+        const response = await fetch('http://localhost:3000/api/activite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const res = await response.json();
+        if (res.success) {
+          resultDiv.textContent = 'Activité enregistrée !';
+          resultDiv.className = 'success';
+          form.reset();
+        } else {
+          resultDiv.textContent = 'Erreur lors de l\'enregistrement.';
+          resultDiv.className = 'error';
+        }
+      } catch (err) {
+        resultDiv.textContent = 'Erreur de connexion au serveur.';
+        resultDiv.className = 'error';
+      }
+    });
+    // Charger les types et sous-types depuis le fichier XML
+    let typesData = null;
+    fetch('types.xml')
+      .then(response => response.text())
+      .then(str => (new window.DOMParser()).parseFromString(str, 'text/xml'))
+      .then(data => {
+        typesData = data;
+        const types = data.getElementsByTagName('type');
+        const select = document.getElementById('typeSelect');
+        select.innerHTML = '';
+        let defaultTypeIndex = 0;
+        for (let i = 0; i < types.length; i++) {
+          let nameTag = types[i].getElementsByTagName('name')[0];
+          let typeName = '';
+          if (nameTag) {
+            typeName = nameTag.textContent.trim();
+          } else {
+            let childNodes = Array.from(types[i].childNodes).filter(n => n.nodeType === 3);
+            typeName = childNodes.map(n => n.textContent.trim()).filter(t => t.length > 0).join('');
+          }
+          if (typeName.length > 0) {
+            const opt = document.createElement('option');
+            opt.value = typeName;
+            opt.textContent = typeName;
+            select.appendChild(opt);
+            if (typeName === 'evenement') defaultTypeIndex = i;
+          }
+        }
+        // Sélectionner "evenement" par défaut
+        select.selectedIndex = defaultTypeIndex;
+        select.dispatchEvent(new Event('change'));
+      });
+
+    document.getElementById('typeSelect').addEventListener('change', function() {
+      const selectedType = this.value;
+      const subtypeContainer = document.getElementById('subtypeContainer');
+      const subtypeSelect = document.getElementById('subtypeSelect');
+      subtypeSelect.innerHTML = '';
+      if (!typesData) return;
+      const types = typesData.getElementsByTagName('type');
+      let found = false;
+      for (let i = 0; i < types.length; i++) {
+        let typeName = types[i].getElementsByTagName('name')[0]?.textContent || types[i].textContent.trim();
+        if (typeName === selectedType) {
+          const subtypes = types[i].getElementsByTagName('subtype');
+          if (subtypes.length > 0) {
+            for (let j = 0; j < subtypes.length; j++) {
+              const opt = document.createElement('option');
+              opt.value = subtypes[j].textContent;
+              opt.textContent = subtypes[j].textContent;
+              subtypeSelect.appendChild(opt);
+            }
+            // Sélectionner "ponctuel" par défaut si présent
+            for (let j = 0; j < subtypes.length; j++) {
+              if (subtypes[j].textContent === 'ponctuel') {
+                subtypeSelect.selectedIndex = j;
+                break;
+              }
+            }
+            subtypeContainer.style.display = '';
+            found = true;
+          }
+        }
+      }
+      if (!found) {
+        subtypeContainer.style.display = 'none';
+      }
+    });
+    // Fonction pour afficher la liste des activités
+    async function chargerActivites() {
+      const div = document.getElementById('listeActivites');
+      div.innerHTML = 'Chargement...';
+      try {
+        const response = await fetch('http://localhost:3000/api/activites');
+        const activites = await response.json();
+        if (Array.isArray(activites) && activites.length > 0) {
+          let html = '<ul>';
+          for (const act of activites) {
+            html += `<li><b>${act.titre}</b> (${act.type}${act.subtype ? ' - ' + act.subtype : ''})<br>
+              Du ${act.date_debut} au ${act.date_fin}<br>
+              Lieu : ${act.lieu}<br>
+              Participants : ${act.participants || '-'}<br>
+              Infos : ${act.infos || '-'}
+            </li>`;
+          }
+          html += '</ul>';
+          div.innerHTML = html;
+        } else {
+          div.innerHTML = 'Aucune activité enregistrée.';
+        }
+      } catch (e) {
+        div.innerHTML = 'Erreur lors du chargement.';
+      }
+    }
+
+    // Charger la liste au chargement de la page
+    window.addEventListener('DOMContentLoaded', chargerActivites);
+    // Recharger la liste après ajout
+    document.getElementById('activityForm').addEventListener('submit', function() {
+      setTimeout(chargerActivites, 500);
+    });
+  </script>
+</body>
+</html>
