@@ -1,4 +1,7 @@
 
+// ...existing code...
+
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
@@ -59,9 +62,26 @@ app.post('/api/activite', (req, res) => {
   );
 });
 
-// Route pour tester le serveur
+// Route pour modifier une activité
+app.put('/api/activite/:id', (req, res) => {
+  const id = req.params.id;
+  const { titre, type, subtype, date_debut, date_fin, lieu, participants, infos } = req.body;
+  db.run(
+    'UPDATE activite SET titre=?, type=?, subtype=?, date_debut=?, date_fin=?, lieu=?, participants=?, infos=? WHERE id=?',
+    [titre, type, subtype, date_debut, date_fin, lieu, participants, infos, id],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.json({ success: true });
+      }
+    }
+  );
+});
+
+// Rediriger la racine vers /formulaire.html
 app.get('/', (req, res) => {
-  res.send('Serveur opérationnel');
+  res.redirect('/formulaire.html');
 });
 
 app.listen(port, () => {

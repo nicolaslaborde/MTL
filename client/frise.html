@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Frise chronologique</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #timeline {
+      position: relative;
+      width: 100%;
+      height: 120px;
+      border-bottom: 2px solid #333;
+      margin-bottom: 40px;
+      background: #f8f8f8;
+    }
+    .marker {
+      position: absolute;
+      bottom: 0;
+      width: 12px;
+      height: 12px;
+      background: #1976d2;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #fff;
+      box-shadow: 0 0 2px #333;
+      transition: background 0.2s;
+    }
+    .marker:hover {
+      background: #ff9800;
+    }
+    .popup {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #888;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px #0002;
+      z-index: 10;
+      min-width: 200px;
+      pointer-events: none;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Frise chronologique des activités</h2>
+  <div id="dates-axis" style="position:relative;height:30px;margin-bottom:-10px;z-index:2;"></div>
+  <div id="timeline"></div>
+  <div id="popup" class="popup" style="display:none"></div>
+  <script>
+    let activites = [];
+    async function chargerActivites() {
+      const response = await fetch('http://localhost:3000/api/activites');
+      activites = await response.json();
+      dessinerFrise();
+    }
+
+    function dessinerFrise() {
+      const timeline = document.getElementById('timeline');
+      const axis = document.getElementById('dates-axis');
+      timeline.innerHTML = '';
+      axis.innerHTML = '';
+      if (!activites.length) return;
+      // Trouver min/max date
+      const dates = activites.map(a => new Date(a.date_debut));
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+      const totalMs = maxDate - minDate;
+      // Axe des X : repères de date
+      let ticks = 5;
+      if (totalMs === 0) {
+        // Un seul repère si tous les événements sont ponctuels
+        const label = document.createElement('div');
+        label.style.position = 'absolute';
+        label.style.left = '50%';
+        label.style.transform = 'translateX(-50%)';
+        label.style.fontSize = '13px';
+        label.textContent = minDate.toISOString().slice(0, 10);
+        axis.appendChild(label);
+        // Marqueurs répartis
+        activites.forEach((a, i) => {
+          const pos = (i + 1) / (activites.length + 1) * 100;
+          const marker = document.createElement('div');
+          marker.className = 'marker';
+          marker.style.left = `calc(${pos}% - 6px)`;
+          marker.title = a.titre;
+          marker.dataset.index = i;
+          marker.addEventListener('mouseenter', showPopup);
+          marker.addEventListener('mouseleave', hidePopup);
+          marker.addEventListener('dblclick', openEditForm);
+          timeline.appendChild(marker);
+        });
+      } else {
+        // Plusieurs repères sur l'axe des X
+        for (let t = 0; t <= ticks; t++) {
+          const frac = t / ticks;
+          const d = new Date(minDate.getTime() + frac * totalMs);
+          const label = document.createElement('div');
+          label.style.position = 'absolute';
+          label.style.left = `calc(${frac * 100}% - 25px)`;
+          label.style.fontSize = '13px';
+          label.style.width = '50px';
+          label.style.textAlign = 'center';
+          label.style.background = '#fff';
+          label.style.border = '1px solid #ccc';
+          label.style.borderRadius = '4px';
+          label.style.padding = '1px 2px';
+          label.style.top = '0';
+          label.textContent = d.toISOString().slice(0, 10);
+          axis.appendChild(label);
+        }
+        // Marqueurs placés selon la date
+        activites.forEach((a, i) => {
+          const d = new Date(a.date_debut);
+          const pos = ((d - minDate) / totalMs) * 100;
+          const marker = document.createElement('div');
+          marker.className = 'marker';
+          marker.style.left = `calc(${pos}% - 6px)`;
+          marker.title = a.titre;
+          marker.dataset.index = i;
+          marker.addEventListener('mouseenter', showPopup);
+          marker.addEventListener('mouseleave', hidePopup);
+          marker.addEventListener('dblclick', openEditForm);
+          timeline.appendChild(marker);
+        });
+      }
+    }
+
+    function showPopup(e) {
+      const idx = e.target.dataset.index;
+      const a = activites[idx];
+      const popup = document.getElementById('popup');
+      popup.innerHTML = `<b>${a.titre}</b><br>Type: ${a.type}${a.subtype ? ' - ' + a.subtype : ''}<br>Date: ${a.date_debut}${a.date_fin && a.date_fin !== a.date_debut ? ' au ' + a.date_fin : ''}<br>Lieu: ${a.lieu || '-'}<br>Participants: ${a.participants || '-'}<br>Infos: ${a.infos || '-'}`;
+      popup.style.display = 'block';
+      const rect = e.target.getBoundingClientRect();
+      popup.style.left = rect.left + window.scrollX + 'px';
+      popup.style.top = (rect.top + window.scrollY - 60) + 'px';
+    }
+    function hidePopup() {
+      document.getElementById('popup').style.display = 'none';
+    }
+    function openEditForm(e) {
+      const idx = e.target.dataset.index;
+      const a = activites[idx];
+      // Ouvre un formulaire de modification (simple prompt pour démo)
+      const nvTitre = prompt('Modifier le titre :', a.titre);
+      if (nvTitre !== null && nvTitre !== a.titre) {
+        fetch('http://localhost:3000/api/activite/' + a.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...a, titre: nvTitre })
+        }).then(() => chargerActivites());
+      }
+    }
+    chargerActivites();
+  </script>
+</body>
+</html>
