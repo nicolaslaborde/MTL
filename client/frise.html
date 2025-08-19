@@ -5,25 +5,34 @@
   <title>Frise chronologique</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 40px; }
+    #frise-container {
+      width: 100%;
+      overflow-x: auto;
+      border-bottom: 1px solid #ccc;
+    }
     #timeline {
       position: relative;
-      width: 100%;
-      height: 120px;
-      border-bottom: 2px solid #333;
+      min-width: 600px;
+      height: 40px;
       margin-bottom: 40px;
-      background: #f8f8f8;
+      background: linear-gradient(90deg, #e3e3e3 0%, #f8f8f8 100%);
+      border-radius: 18px;
+      border: 2px solid #333;
+      box-shadow: 0 2px 8px #0001;
     }
     .marker {
       position: absolute;
-      bottom: 0;
-      width: 12px;
-      height: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
       background: #1976d2;
       border-radius: 50%;
       cursor: pointer;
       border: 2px solid #fff;
       box-shadow: 0 0 2px #333;
       transition: background 0.2s;
+      z-index: 2;
     }
     .marker:hover {
       background: #ff9800;
@@ -44,29 +53,82 @@
 </head>
 <body>
   <h2>Frise chronologique des activités</h2>
-  <div id="dates-axis" style="position:relative;height:30px;margin-bottom:-10px;z-index:2;"></div>
+  <div id="frise-container" style="overflow-x:auto; position:relative; width:100%;">
+    <div id="dates-axis" style="position:relative;height:30px;margin-bottom:0;z-index:2; min-width:600px;"></div>
   <div id="timeline"></div>
+  <div id="add-form-popup" class="popup" style="display:none"></div>
+  </div>
   <div id="popup" class="popup" style="display:none"></div>
   <script>
     let activites = [];
+    let zoom = 1;
+    let scrollTo = null;
     async function chargerActivites() {
       const response = await fetch('http://localhost:3000/api/activites');
       activites = await response.json();
       dessinerFrise();
     }
 
-    function dessinerFrise() {
+  function dessinerFrise() {
       const timeline = document.getElementById('timeline');
       const axis = document.getElementById('dates-axis');
+      const container = document.getElementById('frise-container');
       timeline.innerHTML = '';
       axis.innerHTML = '';
       if (!activites.length) return;
       // Trouver min/max date
-      const dates = activites.map(a => new Date(a.date_debut));
+      const dates = activites.map(a => {
+        const [day, month, year] = a.date_debut.split('/');
+        return new Date(`${year}-${month}-${day}`);
+      });
       const minDate = new Date(Math.min(...dates));
-      const maxDate = new Date(Math.max(...dates));
-      const totalMs = maxDate - minDate;
+  let maxDate = new Date(Math.max(...dates));
+  const today = new Date();
+  // Si la date du jour est après la date max, on l'utilise comme borne finale
+  if (today > maxDate) maxDate = today;
+  const totalMs = maxDate - minDate;
+      // Largeur dynamique selon zoom
+      let baseWidth = Math.max(600, activites.length * 40);
+      let width = baseWidth * zoom;
+      timeline.style.width = width + 'px';
+      axis.style.width = width + 'px';
       // Axe des X : repères de date
+      // Ajout du double-clic sur la frise pour ajouter un événement
+      // Ajout du double-clic sur la frise (hors marqueur)
+      timeline.addEventListener('dblclick', function(e) {
+        // Ne rien faire si on double-clique sur un marqueur
+        if (e.target.classList.contains('marker')) return;
+        const rect = timeline.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const frac = x / rect.width;
+        const dateClic = new Date(minDate.getTime() + frac * (maxDate - minDate));
+        ouvrirFormulaireAjout(dateClic, e.clientX, e.clientY);
+      });
+    // Ouvre un mini-formulaire pour ajouter un événement à une date donnée
+    function ouvrirFormulaireAjout(date, x, y) {
+      const popup = document.getElementById('add-form-popup');
+      popup.innerHTML = `<b>Nouvel événement</b><br>
+        Date : <input type="text" id="add-date" value="${date.toISOString().slice(0,10)}"><br>
+        Titre : <input type="text" id="add-titre"><br>
+        <button id="add-valider">Valider</button>
+        <button id="add-annuler">Annuler</button>`;
+      popup.style.display = 'block';
+      popup.style.left = x + 'px';
+      popup.style.top = (y - 40) + 'px';
+      document.getElementById('add-annuler').onclick = () => popup.style.display = 'none';
+      document.getElementById('add-valider').onclick = async () => {
+        const titre = document.getElementById('add-titre').value.trim();
+        const date_debut = document.getElementById('add-date').value;
+        if (!titre || !date_debut) return alert('Titre et date obligatoires');
+        await fetch('http://localhost:3000/api/activite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titre, date_debut, date_fin: date_debut })
+        });
+        popup.style.display = 'none';
+        chargerActivites();
+      };
+    }
       let ticks = 5;
       if (totalMs === 0) {
         // Un seul repère si tous les événements sont ponctuels
@@ -75,7 +137,7 @@
         label.style.left = '50%';
         label.style.transform = 'translateX(-50%)';
         label.style.fontSize = '13px';
-        label.textContent = minDate.toISOString().slice(0, 10);
+        label.textContent = `${('0'+minDate.getDate()).slice(-2)}/${('0'+(minDate.getMonth()+1)).slice(-2)}/${minDate.getFullYear()}`;
         axis.appendChild(label);
         // Marqueurs répartis
         activites.forEach((a, i) => {
@@ -106,7 +168,7 @@
           label.style.borderRadius = '4px';
           label.style.padding = '1px 2px';
           label.style.top = '0';
-          label.textContent = d.toISOString().slice(0, 10);
+          label.textContent = `${('0'+d.getDate()).slice(-2)}/${('0'+(d.getMonth()+1)).slice(-2)}/${d.getFullYear()}`;
           axis.appendChild(label);
         }
         // Marqueurs placés selon la date
@@ -123,6 +185,11 @@
           marker.addEventListener('dblclick', openEditForm);
           timeline.appendChild(marker);
         });
+      }
+      // Scroll automatique si demandé
+      if (scrollTo !== null) {
+        container.scrollLeft = scrollTo * width;
+        scrollTo = null;
       }
     }
 
@@ -152,6 +219,23 @@
         }).then(() => chargerActivites());
       }
     }
+    // Ajout du zoom à la molette sur le conteneur
+    document.addEventListener('DOMContentLoaded', function() {
+      const container = document.getElementById('frise-container');
+      container.addEventListener('wheel', function(e) {
+        if (e.ctrlKey || e.altKey || e.shiftKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          let oldZoom = zoom;
+          if (e.deltaY < 0) zoom = Math.min(zoom * 1.2, 20);
+          else zoom = Math.max(zoom / 1.2, 0.2);
+          // Centrer le zoom sur la souris
+          const rect = this.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          scrollTo = x / rect.width;
+          dessinerFrise();
+        }
+      }, { passive: false });
+    });
     chargerActivites();
   </script>
 </body>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Tableau des entrées</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px;
+      text-align: left;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tableau des entrées</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Titre</th>
+        <th>Type</th>
+        <th>Subtype</th>
+        <th>Date Début</th>
+        <th>Date Fin</th>
+        <th>Lieu</th>
+        <th>Participants</th>
+        <th>Infos</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+      <!-- Les données seront insérées ici -->
+    </tbody>
+  </table>
+
+  <script>
+    async function mettreAJour(id, colonne, valeur, ligne) {
+      const donnees = {};
+      ligne.querySelectorAll('td').forEach((cell, index) => {
+        if (index > 0) { // Ignorer la colonne ID
+          const colonnes = ['titre', 'type', 'subtype', 'date_debut', 'date_fin', 'lieu', 'participants', 'infos'];
+          donnees[colonnes[index - 1]] = index - 1 === colonnes.indexOf(colonne) ? valeur : cell.textContent.trim();
+        }
+      });
+      await fetch(`http://localhost:3000/api/activite/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(donnees)
+      });
+    }
+
+    function rendreCelluleEditable(cell, id, colonne, ligne) {
+      const ancienneValeur = cell.textContent;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = ancienneValeur;
+      input.style.width = '100%';
+      cell.innerHTML = '';
+      cell.appendChild(input);
+      input.focus();
+
+      input.addEventListener('blur', async () => {
+        const nouvelleValeur = input.value.trim();
+        if (nouvelleValeur !== ancienneValeur) {
+          await mettreAJour(id, colonne, nouvelleValeur, ligne);
+          cell.textContent = nouvelleValeur;
+        } else {
+          cell.textContent = ancienneValeur;
+        }
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          input.blur();
+        }
+      });
+    }
+
+    async function chargerDonnees() {
+      const response = await fetch('http://localhost:3000/api/activites');
+      const activites = await response.json();
+      // Tri par date de début
+      activites.sort((a, b) => {
+        if (!a.date_debut || !b.date_debut) return 0; // Gérer les dates manquantes
+        const [dayA, monthA, yearA] = a.date_debut.split('/');
+        const [dayB, monthB, yearB] = b.date_debut.split('/');
+        const dateA = new Date(`${yearA}-${monthA}-${dayA}`);
+        const dateB = new Date(`${yearB}-${monthB}-${dayB}`);
+        return dateA - dateB;
+      });
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+      activites.forEach(a => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${a.id}</td>
+          <td>${a.titre || '-'}</td>
+          <td>${a.type || '-'}</td>
+          <td>${a.subtype || '-'}</td>
+          <td>${a.date_debut || '-'}</td>
+          <td>${a.date_fin || '-'}</td>
+          <td>${a.lieu || '-'}</td>
+          <td>${a.participants || '-'}</td>
+          <td>${a.infos || '-'}</td>
+        `;
+        tbody.appendChild(row);
+
+        // Rendre les cellules éditables (sauf ID)
+        const colonnes = ['titre', 'type', 'subtype', 'date_debut', 'date_fin', 'lieu', 'participants', 'infos'];
+        row.querySelectorAll('td').forEach((cell, index) => {
+          if (index > 0) { // Ignorer la colonne ID
+            cell.addEventListener('dblclick', () => rendreCelluleEditable(cell, a.id, colonnes[index - 1], row));
+          }
+        });
+      });
+    }
+
+    chargerDonnees();
+  </script>
+</body>
+</html>

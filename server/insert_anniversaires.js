@@ -19,7 +19,7 @@ function insertAnniversaires() {
     for (let year = startYear; year <= endYear; year++) {
       const age = year - 1961;
       const titre = `Anniverssaire Nicolas Laborde ${age} ans`;
-      const date = `${year}-11-01`;
+      const date = `01/11/${year}`;
       db.run(
         'INSERT INTO activite (titre, type, subtype, date_debut, date_fin, lieu, participants, infos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [titre, type, subtype, date, date, lieu, participants, infos],

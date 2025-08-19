@@ -17,10 +17,12 @@ db.all('SELECT * FROM activite', [], (err, rows) => {
   rows.forEach((row, i) => {
     if (!row.titre || typeof row.titre !== 'string' || !row.titre.trim()) {
       console.log(`Entrée #${row.id} : titre manquant ou vide.`);
+      console.log('  Donnée :', row);
       ok = false;
     }
-    if (!row.date_debut || !/^\d{4}-\d{2}-\d{2}$/.test(row.date_debut)) {
+    if (!row.date_debut || !/^\d{2}\/\d{2}\/\d{4}$/.test(row.date_debut)) {
       console.log(`Entrée #${row.id} : date_debut invalide ou manquante (${row.date_debut})`);
+      console.log('  Donnée :', row);
       ok = false;
     }
     // Optionnel : vérifier type, subtype, etc.
